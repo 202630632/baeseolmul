@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>마블 런(Marble Run) 익스트림 추첨기</title>
+  <!-- Matter.js 물리 엔진 CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --panel-bg: #1e293b;
+      --accent-color: #f43f5e;
+      --text-color: #f8fafc;
+      --sub-text: #94a3b8;
+      --highlight: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
+      background: var(--panel-bg);
+      padding: 24px;
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      max-width: 1000px;
+      width: 100%;
+    }
+
+    .controls {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 280px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      color: var(--highlight);
+      text-align: center;
+    }
+
+    p.desc {
+      font-size: 0.85rem;
+      color: var(--sub-text);
+      line-height: 1.4;
+    }
+
+    textarea {
+      width: 100%;
+      height: 140px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      color: #fff;
+      padding: 12px;
+      font-size: 0.95rem;
+      resize: vertical;
+      line-height: 1.4;
+    }
+
+    textarea:focus {
+      outline: 2px solid var(--highlight);
+    }
+
+    button {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      padding: 14px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
+    }
+
+    button:hover {
+      background: #fb7185;
+      transform: translateY(-2px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .status-board {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .info-box {
+      padding: 12px;
+      background: #0f172a;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      text-align: center;
+    }
+
+    .info-box.winner {
+      border: 2px solid #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    .info-title {
+      font-size: 0.75rem;
+      color: var(--sub-text);
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #fff;
+      word-break: break-all;
+    }
+
+    .info-box.winner .info-value {
+      color: var(--highlight);
+      font-size: 1.6rem;
+    }
+
+    #game-container {
+      position: relative;
+      width: 600px;
+      height: 800px;
+      background: #030712;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid #334155;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    }
+
+    canvas {
+      display: block;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+      #game-container {
+        width: 100%;
+        height: 600px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- 왼쪽: 설정 패널 -->
+    <div class="controls">
+      <h1>🎰 익스트림 마블 런</h1>
+      <p class="desc">선택지를 쉼표(,)로 구분해 입력하세요. 6,500px 길이의 초장거리 트랙을 완주하여 가장 먼저 도착하는 구슬이 당첨됩니다!</p>
+      
+      <textarea id="optionsInput" placeholder="선택지들을 쉼표로 구분해 입력하세요...">짜장면, 짬뽕, 탕수육, 마라탕, 초밥, 치킨, 피자, 햄버거, 돈까스, 족발, 보쌈, 떡볶이</textarea>
+      
+      <button id="startBtn">🚀 레이스 시작!</button>
+
+      <div class="status-board">
+        <div class="info-box">
+          <div class="info-title">👑 현재 1위 (카메라 추적 중)</div>
+          <div class="info-value" id="leaderText">-</div>
+        </div>
+        <div class="info-box winner">
+          <div class="info-title">🏆 최종 당첨 선택지</div>
+          <div class="info-value" id="winnerText">?</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 2D 물리 게임 화면 -->
+    <div id="game-container"></div>
+  </div>
+
+  <script>
+    const { Engine, Render, Runner, Bodies, Composite, Body, Events } = Matter;
+
+    const container = document.getElementById('game-container');
+    const VIEW_WIDTH = 600;
+    const VIEW_HEIGHT = 800;
+    const TRACK_HEIGHT = 6500; // 기존 대비 약 10배 길어진 트랙 높이
+
+    // 1. 물리 엔진 & 렌더러 초기화
+    const engine = Engine.create();
+    engine.gravity.y = 1.1; // 스피디한 낙하를 위해 중력 상향
+    engine.positionIterations = 10;
+    engine.velocityIterations = 10;
+
+    const render = Render.create({
+      element: container,
+      engine: engine,
+      options: {
+        width: VIEW_WIDTH,
+        height: VIEW_HEIGHT,
+        hasBounds: true, // 카메라 시점 이동 활성화
+        wireframes: false,
+        background: '#030712'
+      }
+    });
+
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // 변수 관리
+    let marbles = [];
+    let rotators = [];
+    let isRacing = false;
+    let winner = null;
+    let currentLeader = null;
+    let cameraY = 0;
+
+    const colors = [
+      '#f43f5e', '#38bdf8', '#a855f7', '#4ade80', 
+      '#facc15', '#fb923c', '#ec4899', '#06b6d4'
+    ];
+
+    // 2. 초장거리 트랙 & 장애물 생성
+    function buildTrack() {
+      Composite.clear(engine.world);
+      rotators = [];
+
+      const wallOpts = { isStatic: true, render: { fillStyle: '#1e293b' } };
+      const obsOpts = { isStatic: true, render: { fillStyle: '#334155' } };
+      const bounceOpts = { isStatic: true, restitution: 1.2, render: { fillStyle: '#f43f5e' } };
+
+      // 양쪽 외곽 벽
+      Composite.add(engine.world, [
+        Bodies.rectangle(10, TRACK_HEIGHT / 2, 20, TRACK_HEIGHT, wallOpts),
+        Bodies.rectangle(VIEW_WIDTH - 10, TRACK_HEIGHT / 2, 20, TRACK_HEIGHT, wallOpts),
+        Bodies.rectangle(VIEW_WIDTH / 2, -10, VIEW_WIDTH, 20, wallOpts) // 천장
+      ]);
+
+      // --- [1구역: 0~800px] 출발 핫퍼 & Galton Board (핀볼 구역) ---
+      Composite.add(engine.world, [
+        Bodies.rectangle(120, 220, 260, 16, { isStatic: true, angle: 0.4, ...obsOpts }),
+        Bodies.rectangle(VIEW_WIDTH - 120, 220, 260, 16, { isStatic: true, angle: -0.4, ...obsOpts })
+      ]);
+
+      for (let y = 320; y <= 750; y += 50) {
+        const count = (y % 100 === 0) ? 7 : 8;
+        const spacing = (VIEW_WIDTH - 60) / (count + 1);
+        for (let i = 0; i < count; i++) {
+          const x = 30 + spacing * (i + 1);
+          const pin = Bodies.circle(x, y, 7, {
+            isStatic: true,
+            restitution: 0.8,
+            render: { fillStyle: '#38bdf8' }
+          });
+          Composite.add(engine.world, pin);
+        }
+      }
+
+      // --- [2구역: 800~1800px] 회전 바(Spinner) 난관 구역 ---
+      const spinnerY = [950, 1200, 1450, 1700];
+      spinnerY.forEach((y, idx) => {
+        const speed = (idx % 2 === 0 ? 0.04 : -0.04);
+        const s1 = Bodies.rectangle(180, y, 180, 16, { isStatic: true, render: { fillStyle: '#a855f7' } });
+        const s2 = Bodies.rectangle(420, y, 180, 16, { isStatic: true, render: { fillStyle: '#a855f7' } });
+        rotators.push({ body: s1, speed }, { body: s2, speed: -speed });
+        Composite.add(engine.world, [s1, s2]);
+      });
+
+      // --- [3구역: 1800~2900px] 연속 지그재그 슬로프 & 감속 구역 ---
+      for (let y = 1950; y <= 2750; y += 200) {
+        const isLeft = (y / 200) % 2 === 0;
+        const x = isLeft ? 220 : VIEW_WIDTH - 220;
+        const angle = isLeft ? 0.22 : -0.22;
+        const slope = Bodies.rectangle(x, y, 420, 16, {
+          isStatic: true,
+          angle: angle,
+          friction: 0.8,
+          render: { fillStyle: '#facc15' }
+        });
+        Composite.add(engine.world, slope);
+
+        // 슬로프 위 보너스 고탄성 범퍼
+        const bx = isLeft ? 380 : 220;
+        const bumper = Bodies.circle(bx, y - 40, 16, bounceOpts);
+        Composite.add(engine.world, bumper);
+      }
+
+      // --- [4구역: 2900~4000px] 고탄성 범퍼 메이즈 구역 ---
+      for (let y = 3000; y <= 3900; y += 120) {
+        for (let x = 100; x <= VIEW_WIDTH - 100; x += 130) {
+          const shiftX = (y % 240 === 0) ? 0 : 65;
+          const posX = x + shiftX;
+          if (posX > 40 && posX < VIEW_WIDTH - 40) {
+            const b = Bodies.circle(posX, y, 18, bounceOpts);
+            Composite.add(engine.world, b);
+          }
+        }
+      }
+
+      // --- [5구역: 4000~5200px] 초고속 십자 회전창 & 병목 구역 ---
+      for (let y = 4150; y <= 5050; y += 300) {
+        // 병목 가이드
+        Composite.add(engine.world, [
+          Bodies.rectangle(100, y, 180, 14, { isStatic: true, angle: 0.3, ...obsOpts }),
+          Bodies.rectangle(VIEW_WIDTH - 100, y, 180, 14, { isStatic: true, angle: -0.3, ...obsOpts })
+        ]);
+        // 중앙 회전 십자가
+        const cross1 = Bodies.rectangle(VIEW_WIDTH / 2, y + 60, 160, 14, { isStatic: true, render: { fillStyle: '#4ade80' } });
+        const cross2 = Bodies.rectangle(VIEW_WIDTH / 2, y + 60, 14, 160, { isStatic: true, render: { fillStyle: '#4ade80' } });
+        const speed = (y % 600 === 0) ? 0.06 : -0.06;
+        rotators.push({ body: cross1, speed }, { body: cross2, speed });
+        Composite.add(engine.world, [cross1, cross2]);
+      }
+
+      // --- [6구역: 5200~6500px] 파이널 깔때기 & 결승선 ---
+      Composite.add(engine.world, [
+        Bodies.rectangle(160, 5900, 360, 16, { isStatic: true, angle: 0.35, render: { fillStyle: '#38bdf8' } }),
+        Bodies.rectangle(VIEW_WIDTH - 160, 5900, 360, 16, { isStatic: true, angle: -0.35, render: { fillStyle: '#38bdf8' } }),
+        // 결승 바닥 분할 트랩
+        Bodies.rectangle(VIEW_WIDTH / 2, 6400, VIEW_WIDTH, 20, wallOpts)
+      ]);
+    }
+
+    // 3. 물리 엔진 프레임 Update 이벤트
+    Events.on(engine, 'beforeUpdate', () => {
+      // 회전 장애물 동작
+      rotators.forEach(r => {
+        Body.setAngle(r.body, r.body.angle + r.speed);
+      });
+
+      if (!isRacing || marbles.length === 0) return;
+
+      // 선두(가장 Y값이 큰) 구슬 탐색
+      let leader = marbles[0];
+      marbles.forEach(m => {
+        if (m.position.y > leader.position.y) {
+          leader = m;
+        }
+      });
+      currentLeader = leader;
+
+      // 실시간 1위 UI 업데이트
+      if (!winner) {
+        document.getElementById('leaderText').innerText = leader.labelName;
+      }
+
+      // [핵심] 카메라 추적 Logic (부드러운 카메라 이동 Lerp)
+      const targetCamY = leader.position.y - (VIEW_HEIGHT * 0.35); // 선두를 화면 상단 35% 위치에 고정
+      const maxCamY = TRACK_HEIGHT - VIEW_HEIGHT;
+      const clampedTargetY = Math.max(0, Math.min(maxCamY, targetCamY));
+      
+      cameraY += (clampedTargetY - cameraY) * 0.08; // 0.08 계수로 부드럽게 추종
+
+      // 렌더러 시점(Bounds) 업데이트
+      render.bounds.min.y = cameraY;
+      render.bounds.max.y = cameraY + VIEW_HEIGHT;
+      render.bounds.min.x = 0;
+      render.bounds.max.x = VIEW_WIDTH;
+
+      // 결승선 통과 판정 (Y > 6100 지점)
+      if (!winner && leader.position.y >= 6100) {
+        winner = leader.labelName;
+        document.getElementById('winnerText').innerText = winner;
+        document.getElementById('leaderText').innerText = winner + " (완주!)";
+        isRacing = false;
+      }
+    });
+
+    // 4. 커스텀 Canvas 렌더링 (구슬 이름 & 👑 1위 왕관 표시)
+    Events.on(render, 'afterRender', () => {
+      const ctx = render.context;
+      const minY = render.bounds.min.y;
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // 화면 좌표계 고정
+
+      // A. 결승선 드로잉
+      const finishScreenY = 6100 - minY;
+      if (finishScreenY >= 0 && finishScreenY <= VIEW_HEIGHT) {
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 10]);
+        ctx.beginPath();
+        ctx.moveTo(180, finishScreenY);
+        ctx.lineTo(VIEW_WIDTH - 180, finishScreenY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🏁 FINISH LINE 🏁', VIEW_WIDTH / 2, finishScreenY - 10);
+      }
+
+      // B. 구슬 이름 및 1위 표식
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      marbles.forEach(m => {
+        const screenX = m.position.x;
+        const screenY = m.position.y - minY;
+
+        // 화면 범위 내의 구슬만 렌더링
+        if (screenY >= -30 && screenY <= VIEW_HEIGHT + 30) {
+          // 1등 구슬 강조 테두리
+          if (m === currentLeader) {
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, 18, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 왕관 표시
+            ctx.font = '14px sans-serif';
+            ctx.fillText('👑', screenX, screenY - 24);
+            ctx.font = 'bold 12px sans-serif';
+          }
+
+          // 구슬 이름 텍스트
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3;
+          ctx.strokeText(m.labelName, screenX, screenY);
+          ctx.fillText(m.labelName, screenX, screenY);
+        }
+      });
+
+      ctx.restore();
+    });
+
+    // 5. 레이스 시작 함수
+    function startRace() {
+      const input = document.getElementById('optionsInput').value;
+      const options = input.split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      if (options.length === 0) {
+        alert('최소 하나 이상의 선택지를 입력해 주세요!');
+        return;
+      }
+
+      // 초기화
+      buildTrack();
+      marbles = [];
+      winner = null;
+      currentLeader = null;
+      cameraY = 0;
+      isRacing = true;
+
+      document.getElementById('winnerText').innerText = '진행 중...';
+      document.getElementById('leaderText').innerText = '출발!';
+
+      // 상단 핫퍼(Y: 60~160 지점) 내부로 구슬들을 선명히 보이게 낙하
+      options.forEach((opt, idx) => {
+        const row = Math.floor(idx / 5);
+        const col = idx % 5;
+        const spawnX = 200 + col * 50 + (Math.random() * 10 - 5);
+        const spawnY = 60 + row * 30;
+
+        const color = colors[idx % colors.length];
+
+        const marble = Bodies.circle(spawnX, spawnY, 14, {
+          restitution: 0.6,
+          friction: 0.005,
+          density: 0.002,
+          render: {
+            fillStyle: color,
+            strokeStyle: '#ffffff',
+            lineWidth: 2
+          }
+        });
+
+        marble.labelName = opt;
+        marbles.push(marble);
+      });
+
+      Composite.add(engine.world, marbles);
+    }
+
+    // 초기 트랙 로드
+    buildTrack();
+
+    // 시작 버튼 이벤트
+    document.getElementById('startBtn').addEventListener('click', startRace);
+  </script>
+</body>
+</html>
